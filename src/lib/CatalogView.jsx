@@ -353,6 +353,19 @@ export default function CatalogView({ onSelectProduct, addToCart }) {
             </div>
           ) : products.length > 0 ? (
             <>
+              {imagePreview && (
+                <div className="mb-6 flex justify-center">
+                  <div className="relative inline-block">
+                    <img src={imagePreview} alt="Searched instrument" className="h-40 rounded-xl border border-gray-200 shadow-sm object-contain" />
+                    <button
+                      onClick={handleClearImagePreview}
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {products.map((product) => (
                   <ProductCard
