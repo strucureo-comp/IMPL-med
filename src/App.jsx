@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Bot, ShoppingCart } from 'lucide-react';
+import Sidebar from './lib/Sidebar';
+import TopHeader from './lib/TopHeader';
+import AgentView from './lib/AgentView';
 import CatalogView from './lib/CatalogView';
-import ChatView from './lib/ChatView';
 import AdminView from './lib/AdminView';
-import Cart from './lib/Cart';
+import RightPanel from './lib/RightPanel';
 import ProductDetail from './lib/ProductDetail';
 import CheckoutPreview from './lib/CheckoutPreview';
 import AdminLogin from './lib/AdminLogin';
@@ -15,16 +16,13 @@ import {
   updateCartItem,
   removeFromCart as apiRemoveFromCart,
   clearCart as apiClearCart,
+  getSearchHistory,
+  saveSearchHistoryEntry,
+  clearSearchHistoryDB
 } from './lib/api';
 
-const tabs = [
-  { id: 'catalog', label: 'Catalog', icon: Search },
-  { id: 'assistant', label: 'Assistant', icon: Bot },
-];
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState('catalog');
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [view, setView] = useState('agent');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -33,12 +31,29 @@ export default function App() {
   const [cartItems, setCartItems] = useState([]);
   const [cartTotalItems, setCartTotalItems] = useState(0);
   const [toast, setToast] = useState(null);
-  const [visible, setVisible] = useState(true);
-  const lastScrollY = useRef(0);
-  const tabRefs = useRef({});
-  const [indicator, setIndicator] = useState({ width: 0, left: 0 });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [identified, setIdentified] = useState(null);
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [activeSpecialty, setActiveSpecialty] = useState(null);
+  const [initialAgentQuery, setInitialAgentQuery] = useState('');
+  const [sessionKey, setSessionKey] = useState(0);
 
   const sessionId = useRef(getSessionId());
+
+  useEffect(() => {
+    getSearchHistory().then(data => {
+      if (data && data.history) {
+        const parsed = data.history.map(h => {
+          let state = {};
+          try { state = JSON.parse(h.state_json); } catch(e) {}
+          return { requirement: h.requirement, timestamp: h.timestamp, state };
+        });
+        setSearchHistory(parsed);
+      }
+    }).catch(console.error);
+  }, []);
 
   const refreshCart = useCallback(async () => {
     try {
@@ -46,7 +61,7 @@ export default function App() {
       setCartItems(data.items || []);
       setCartTotalItems(data.total_items || 0);
     } catch (err) {
-      console.error('Failed to load cart:', err);
+      console.error('Cart load failed:', err);
     }
   }, []);
 
@@ -57,59 +72,45 @@ export default function App() {
   useEffect(() => {
     const checkHash = () => {
       if (window.location.hash === '#admin' || window.location.hash === '#/admin') {
-        if (!adminToken) {
+        if (!isAdminAuthenticated) {
           setShowAdminLogin(true);
         } else {
-          setActiveTab('admin');
+          setView('admin');
         }
       }
     };
     checkHash();
     window.addEventListener('hashchange', checkHash);
     return () => window.removeEventListener('hashchange', checkHash);
-  }, [adminToken]);
+  }, [isAdminAuthenticated]);
 
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      const el = tabRefs.current[activeTab];
-      if (el) {
-        setIndicator({ width: el.offsetWidth, left: el.offsetLeft });
-      }
-    });
-  }, [activeTab]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const sy = window.scrollY;
-      if (sy > lastScrollY.current && sy > 40) {
-        setVisible(false);
-      } else {
-        setVisible(true);
-      }
-      lastScrollY.current = sy;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  const showToast = (message) => {
-    setToast(message);
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, competitorContext, quantity = 1) => {
     try {
-      await apiAddToCart(sessionId.current, product.code, 1);
+      const context = competitorContext || product._competitorContext || {};
+      const options = {
+        competitor_code: context.competitor_code,
+        competitor_name: context.competitor_name,
+        competitor_manufacturer: context.competitor_manufacturer,
+        match_percent: context.match_percent ?? product.match_percent
+      };
+      
+      await apiAddToCart(sessionId.current, product.code, quantity, options);
       await refreshCart();
-      showToast('Item added to cart');
+      showToast(options.match_percent === 100 ? 'Added \u2728 100% exact match' : 'Added to Surgery Tray');
+      setRightPanelOpen(true);
     } catch (err) {
       console.error('Failed to add to cart:', err);
-      showToast('Failed to add item to cart');
+      showToast('Failed to add instrument to tray');
     }
   };
 
   const updateCartQuantity = async (code, delta) => {
-    const item = cartItems.find(i => i.product_code === code);
+    const item = cartItems.find((i) => i.product_code === code);
     if (!item) return;
     const newQuantity = item.quantity + delta;
     if (newQuantity <= 0) {
@@ -124,7 +125,7 @@ export default function App() {
   };
 
   const removeFromCart = async (code) => {
-    const item = cartItems.find(i => i.product_code === code);
+    const item = cartItems.find((i) => i.product_code === code);
     if (!item) return;
     try {
       await apiRemoveFromCart(sessionId.current, item.id);
@@ -138,93 +139,213 @@ export default function App() {
     try {
       await apiClearCart(sessionId.current);
       await refreshCart();
+      showToast('Surgery Tray cleared');
     } catch (err) {
       console.error('Failed to clear cart:', err);
     }
   };
 
-  const cartCount = cartTotalItems;
+  const handleViewChange = (v) => {
+    if (v === 'admin' && !isAdminAuthenticated) {
+      setShowAdminLogin(true);
+      return;
+    }
+    setView(v);
+    setSidebarOpen(false);
+  };
+
+  const handleNewSession = () => {
+    setView('agent');
+    setCandidates([]);
+    setIdentified(null);
+    setInitialAgentQuery('');
+    setActiveSpecialty(null);
+    setSidebarOpen(false);
+    setSessionKey((k) => k + 1);
+  };
+
+  const addSearchHistory = useCallback((entry) => {
+    setSearchHistory((prev) => {
+      const next = [
+        entry,
+        ...prev.filter(
+          (h) => h.requirement !== entry.requirement
+        ),
+      ].slice(0, 50);
+      return next;
+    });
+    saveSearchHistoryEntry({
+      requirement: entry.requirement,
+      timestamp: entry.timestamp,
+      state_json: JSON.stringify(entry.state)
+    }).catch(console.error);
+  }, []);
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([]);
+    clearSearchHistoryDB().catch(console.error);
+  }, []);
+
+  const handleHistoryClick = (item) => {
+    setView('agent');
+    if (item.state) {
+      setInitialAgentQuery({ isRestored: true, state: item.state });
+    } else {
+      setInitialAgentQuery(item.requirement || item.query);
+    }
+    setSessionKey((k) => k + 1);
+    setSidebarOpen(false);
+  };
+
+  const handleSpecialtySelect = (specialty) => {
+    setActiveSpecialty(specialty);
+    if (view === 'catalog') {
+      // Stay in catalog with specialty active
+    } else {
+      setView('agent');
+      setInitialAgentQuery(`${specialty} surgical instrument requirements`);
+      setSessionKey((k) => k + 1);
+    }
+    setSidebarOpen(false);
+  };
+
+  if (view === 'admin' && isAdminAuthenticated) {
+    return (
+      <div className="h-screen w-full bg-zinc-50 flex flex-col overflow-hidden">
+        <AdminView
+          token={adminToken}
+          onLogout={() => {
+            setAdminToken(null);
+            setView('agent');
+            window.location.hash = '';
+          }}
+          onGoBack={() => {
+            setView('agent');
+            window.location.hash = '';
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-bg-page">
-      <div className="sticky top-0 z-30 transition-transform duration-300 ease-out" style={{ transform: visible ? 'translateY(0)' : 'translateY(-100%)' }}>
-        <div className="border-b border-border-main bg-white/80 backdrop-blur-xl shadow-sm">
-          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-            <div className="flex items-center gap-2 text-base font-bold tracking-tight">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-brand">
-                <path d="M2 12h2l3-9 4 18 4-12 3 6h4" />
-              </svg>
-              <span className="text-text-primary">IMPL</span>
-            </div>
-            <div className="relative flex rounded-2xl bg-bg-surface p-1">
-              <div className="absolute top-1 bottom-1 rounded-2xl bg-white shadow-shadow-card transition-all duration-300 ease-out" style={{ width: indicator.width, left: indicator.left }} />
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    ref={(el) => { tabRefs.current[tab.id] = el; }}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium transition-colors duration-200 ${
-                      activeTab === tab.id ? 'text-text-primary' : 'text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    <Icon size={15} />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setIsCartOpen(true)} className="relative p-1.5 text-text-muted transition-colors hover:text-text-primary">
-                <ShoppingCart size={18} />
-                {cartCount > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex min-w-[16px] h-[16px] items-center justify-center rounded-full bg-brand px-0.5 text-[9px] font-bold text-white">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+    <div className="app-canvas h-screen w-full flex flex-col overflow-hidden bg-[#FAFAFA] text-zinc-900">
+      {/* Top Header */}
+      <TopHeader
+        activeView={view}
+        onViewChange={handleViewChange}
+        cartCount={cartTotalItems}
+        rightPanelOpen={rightPanelOpen}
+        onToggleRightPanel={() => setRightPanelOpen(!rightPanelOpen)}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        sessionTitle="Surgical AI Matcher"
+        sessionSubtitle={activeSpecialty ? activeSpecialty : ''}
+        onOpenCheckout={() => setShowCheckout(true)}
+        onNewSession={handleNewSession}
+      />
+
+      {/* Main Workspace Layout */}
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {/* Left Sidebar */}
+        <Sidebar
+          view={view}
+          onViewChange={handleViewChange}
+          onNewSession={handleNewSession}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          history={searchHistory}
+          onHistoryClick={handleHistoryClick}
+          onClearHistory={clearSearchHistory}
+          onSelectSpecialty={handleSpecialtySelect}
+          activeSpecialty={activeSpecialty}
+        />
+
+        {/* Center Main Viewport */}
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#FAFAFA]">
+          {view === 'agent' && (
+            <AgentView
+              key={sessionKey}
+              initialQuery={initialAgentQuery}
+              restoredState={initialAgentQuery?.isRestored ? initialAgentQuery.state : null}
+              onSessionComplete={(sessionState) => {
+                const req = sessionState.identified?.product_type || sessionState.identified?.name || sessionState.activeQuery;
+                if (req) {
+                  addSearchHistory({
+                    requirement: req,
+                    timestamp: sessionState.timestamp || Date.now(),
+                    view: 'agent',
+                    state: sessionState
+                  });
+                }
+              }}
+              onIdentified={(item) => {
+                setIdentified(item);
+              }}
+              onCandidates={setCandidates}
+              onSelectProduct={setSelectedProduct}
+              addToCart={addToCart}
+            />
+          )}
+
+          {view === 'catalog' && (
+            <CatalogView
+              onSelectProduct={setSelectedProduct}
+              addToCart={addToCart}
+              activeCategorySpecialty={activeSpecialty}
+            />
+          )}
+
+          </main>
+
+        {/* Right Surgery Tray Drawer */}
+        {rightPanelOpen && (
+          <RightPanel
+            cartItems={cartItems}
+            onRemoveFromCart={removeFromCart}
+            onUpdateQuantity={updateCartQuantity}
+            onCheckout={() => setShowCheckout(true)}
+            onClearCart={clearCart}
+            selectedProduct={selectedProduct}
+            onSelectProduct={setSelectedProduct}
+            onClose={() => setRightPanelOpen(false)}
+          />
+        )}
       </div>
 
-      <main className="flex flex-col">
-        {activeTab === 'catalog' && (
-          <CatalogView onSelectProduct={setSelectedProduct} addToCart={addToCart} />
-        )}
-        {activeTab === 'assistant' && <ChatView addToCart={addToCart} onSelectProduct={setSelectedProduct} />}
-        {activeTab === 'admin' && isAdminAuthenticated && <AdminView token={adminToken} />}
-      </main>
-
-      {isCartOpen && (
-        <Cart
-          items={cartItems}
-          total={0}
-          onClose={() => setIsCartOpen(false)}
-          onUpdateQuantity={updateCartQuantity}
-          onRemove={removeFromCart}
-          onClear={clearCart}
-          onCheckout={() => { setIsCartOpen(false); setShowCheckout(true); }}
+      {/* Modals & Dialogs */}
+      {selectedProduct && (
+        <ProductDetail
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          addToCart={addToCart}
         />
       )}
 
-      {selectedProduct && (
-        <ProductDetail product={selectedProduct} onClose={() => setSelectedProduct(null)} addToCart={addToCart} />
-      )}
-
       {showCheckout && (
-        <CheckoutPreview items={cartItems} total={0} onClose={() => setShowCheckout(false)} />
+        <CheckoutPreview
+          items={cartItems}
+          onClose={() => setShowCheckout(false)}
+        />
       )}
 
       {showAdminLogin && (
         <AdminLogin
           onClose={() => setShowAdminLogin(false)}
-          onLogin={(token) => { setAdminToken(token); setShowAdminLogin(false); setActiveTab('admin'); }}
+          onLogin={(token) => {
+            setAdminToken(token);
+            setShowAdminLogin(false);
+            setView('admin');
+          }}
         />
       )}
 
-      {toast && <Toaster message={toast} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toaster
+          message={toast}
+          onClose={() => setToast(null)}
+          onViewCart={() => setRightPanelOpen(true)}
+        />
+      )}
     </div>
   );
 }

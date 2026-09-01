@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '');
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
@@ -28,9 +28,12 @@ export function getHealth() {
 }
 
 export function searchProducts({ query, page = 1, specialty, family_id, show_disabled = false }) {
+  const body = { query, page, show_disabled };
+  if (specialty) body.specialty = specialty;
+  if (family_id) body.family_id = family_id;
   return requestJson('/search', {
     method: 'POST',
-    body: { query, page, specialty, family_id, show_disabled },
+    body,
   });
 }
 
@@ -62,10 +65,15 @@ export function getCart(sessionId) {
   return requestJson(`/cart/${encodeURIComponent(sessionId)}`);
 }
 
-export function addToCart(sessionId, productCode, quantity = 1) {
+export function addToCart(sessionId, productCode, quantity = 1, options = {}) {
+  const body = { session_id: sessionId, product_code: productCode, quantity };
+  if (options.competitor_code != null) body.competitor_code = options.competitor_code;
+  if (options.competitor_name != null) body.competitor_name = options.competitor_name;
+  if (options.competitor_manufacturer != null) body.competitor_manufacturer = options.competitor_manufacturer;
+  if (options.match_percent != null) body.match_percent = options.match_percent;
   return requestJson('/cart/add', {
     method: 'POST',
-    body: { session_id: sessionId, product_code: productCode, quantity },
+    body,
   });
 }
 
@@ -96,18 +104,18 @@ export async function checkoutCart(payload) {
   return res.blob();
 }
 
-export function streamChat(conversationId, message, onEvent) {
+export function matchRequirementStream(requirement, onEvent) {
   const controller = new AbortController();
 
-  fetch(`${API_BASE}/chat`, {
+  fetch(`${API_BASE}/match/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message }),
+    body: JSON.stringify({ requirement }),
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      onEvent({ type: 'error', data: err.detail || 'Chat request failed' });
+      onEvent({ type: 'error', data: err.detail || 'Match stream request failed' });
       return;
     }
     consumeSSE(res, onEvent);
@@ -120,22 +128,20 @@ export function streamChat(conversationId, message, onEvent) {
   return () => controller.abort();
 }
 
-export function streamChatImage(conversationId, file, message, onEvent) {
+export function matchImageStream(file, onEvent) {
   const controller = new AbortController();
 
   const form = new FormData();
   form.append('file', file);
-  form.append('message', message || '');
-  if (conversationId) form.append('conversation_id', conversationId);
 
-  fetch(`${API_BASE}/chat/image`, {
+  fetch(`${API_BASE}/match/stream/image`, {
     method: 'POST',
     body: form,
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      onEvent({ type: 'error', data: err.detail || 'Chat image request failed' });
+      onEvent({ type: 'error', data: err.detail || 'Image match stream request failed' });
       return;
     }
     consumeSSE(res, onEvent);
@@ -155,30 +161,38 @@ async function consumeSSE(res, onEvent) {
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) {
-      if (buffer.trim()) {
-        const remaining = buffer.split('\n');
-        for (const line of remaining) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              onEvent(data);
-            } catch {}
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary !== -1) {
+      const chunk = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      
+      if (chunk.trim()) {
+        const lines = chunk.split('\n');
+        let eventType = 'message';
+        let eventData = '';
+        
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            eventData += line.slice(5).trim();
+          }
+        }
+        
+        if (eventData) {
+          try {
+            const parsed = JSON.parse(eventData);
+            // If the backend sends an event type, pass it through; otherwise if the JSON has a 'type', use that
+            onEvent(eventType !== 'message' ? { type: eventType, ...parsed } : parsed);
+          } catch (e) {
+            console.error('SSE parse error:', e, chunk);
           }
         }
       }
-      break;
-    }
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          onEvent(data);
-        } catch {}
-      }
+      boundary = buffer.indexOf('\n\n');
     }
   }
 }
@@ -280,10 +294,51 @@ export function adminReindex(token) {
 }
 
 export function getSessionId() {
-  let id = sessionStorage.getItem('kls_session_id');
+  let id = localStorage.getItem('kls_session_id');
   if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem('kls_session_id', id);
+    id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+    localStorage.setItem('kls_session_id', id);
   }
   return id;
+}
+
+export function listMappings(q = '', limit = 100) {
+  const params = new URLSearchParams({ q: q || '', limit: String(limit) });
+  return requestJson(`/mappings?${params}`);
+}
+
+export function confirmMapping(token, payload) {
+  return requestJson('/mappings/confirm', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: payload,
+  });
+}
+
+export async function deleteMapping(token, code) {
+  await request(`/mappings/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function getSearchHistory() {
+  return requestJson('/search_history');
+}
+
+export function saveSearchHistoryEntry(entry) {
+  return requestJson('/search_history', {
+    method: 'POST',
+    body: entry,
+  });
+}
+
+export function clearSearchHistoryDB() {
+  return requestJson('/search_history', {
+    method: 'DELETE',
+  });
+}
+
+export function getProductFamily(code) {
+  return requestJson(`/products/${encodeURIComponent(code)}/family`);
 }

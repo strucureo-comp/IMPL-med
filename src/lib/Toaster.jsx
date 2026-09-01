@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle, X } from 'lucide-react';
+import { CheckCircle2, X } from 'lucide-react';
 import { cn } from './utils';
 
 export default function Toaster({ message, onClose, onViewCart }) {
@@ -10,7 +10,7 @@ export default function Toaster({ message, onClose, onViewCart }) {
       setVisible(true);
       const timer = setTimeout(() => {
         setVisible(false);
-        setTimeout(onClose, 300);
+        setTimeout(onClose, 250);
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -21,33 +21,32 @@ export default function Toaster({ message, onClose, onViewCart }) {
   return (
     <div
       className={cn(
-        'fixed bottom-20 left-1/2 z-50 flex items-center gap-3 px-4 py-3',
-        'bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700',
-        'transition-all duration-300 ease-in-out',
-        visible
-          ? 'translate-y-0 opacity-100'
-          : 'translate-y-4 opacity-0 pointer-events-none'
+        'fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-zinc-950 text-white rounded-2xl shadow-2xl border border-zinc-800 transition-all duration-300 text-xs font-medium',
+        visible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0 pointer-events-none'
       )}
-      style={{ transform: 'translateX(-50%)' }}
     >
-      <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-      <span className="text-sm font-medium">{message}</span>
+      <span className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+        <CheckCircle2 size={13} />
+      </span>
+      <span className="text-zinc-100">
+        {typeof message === 'object' ? message.message : message}
+      </span>
       {onViewCart && (
         <button
           onClick={onViewCart}
-          className="text-sm text-red-400 underline hover:text-red-300 transition-colors ml-2"
+          className="ml-1 px-3 py-1 rounded-full bg-white text-zinc-950 text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
         >
-          View Cart
+          View Tray
         </button>
       )}
       <button
         onClick={() => {
           setVisible(false);
-          setTimeout(onClose, 300);
+          setTimeout(onClose, 250);
         }}
-        className="ml-2 p-1 rounded hover:bg-gray-700 transition-colors"
+        className="ml-1 p-1 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
       >
-        <X className="w-4 h-4 text-gray-400" />
+        <X size={13} />
       </button>
     </div>
   );

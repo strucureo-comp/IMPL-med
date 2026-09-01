@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Download, Pencil } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, Download, Pencil, FileText, CheckCircle2, Hospital, Building, Calendar, Layers, ShieldCheck } from 'lucide-react';
 import { cn } from './utils';
 import { getProductImage, getSessionId, checkoutCart } from './api';
 
@@ -7,18 +8,18 @@ export default function CheckoutPreview({ items = [], onClose }) {
   const [editingField, setEditingField] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [form, setForm] = useState({
-    hospital: '',
-    region: '',
-    report_date: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
-    set_no: '-',
-    name: 'Single instruments',
-    container: '-',
+    hospital: 'St. Jude University Hospital',
+    region: 'Cardiovascular Surgery Dept.',
+    report_date: new Date().toISOString().split('T')[0],
+    set_no: 'SET-CV-2026-08',
+    name: 'Thoracic & Vascular Instrument Set',
+    container: 'Sterile Container 1/1',
   });
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleDownload = async () => {
@@ -37,7 +38,9 @@ export default function CheckoutPreview({ items = [], onClose }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `IMPL-${form.set_no !== '-' ? form.set_no.replace(/\s+/g, '-') : 'Report'}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `IMPL-${
+        form.set_no !== '-' ? form.set_no.replace(/\s+/g, '-') : 'Report'
+      }-${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -51,132 +54,136 @@ export default function CheckoutPreview({ items = [], onClose }) {
   };
 
   const EditableField = ({ field, label, value, className, align = 'left' }) => {
-    const isEditing = editingField === field;
     return (
-      <div className={cn('group relative', className)}>
-        {isEditing ? (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => handleChange(field, e.target.value)}
-            onBlur={() => setEditingField(null)}
-            onKeyDown={(e) => e.key === 'Enter' && setEditingField(null)}
-            autoFocus
-            className={cn(
-              'w-full bg-white border border-blue-300 rounded px-1 py-0.5 text-[11px] leading-tight outline-none ring-2 ring-blue-100',
-              align === 'right' && 'text-right'
-            )}
-          />
-        ) : (
-          <div
-            onClick={() => setEditingField(field)}
-            className={cn(
-              'cursor-pointer rounded px-1 py-0.5 hover:bg-blue-50 hover:border hover:border-blue-200 transition-all min-h-[18px] flex items-center',
-              align === 'right' && 'justify-end',
-              !value && 'text-gray-300 italic'
-            )}
-          >
-            <span className="text-[11px] leading-tight">{value || `+ ${label}`}</span>
-            <Pencil size={8} className="ml-1 opacity-0 group-hover:opacity-100 text-blue-400 shrink-0 transition-opacity" />
-          </div>
-        )}
+      <div className={cn('relative', className)}>
+        <input
+          type="text"
+          value={value}
+          placeholder={label}
+          onChange={(e) => handleChange(field, e.target.value)}
+          className={cn(
+            'w-full bg-white border border-zinc-300 hover:border-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 text-xs outline-none font-semibold text-zinc-900 transition-colors',
+            align === 'right' && 'text-right'
+          )}
+        />
+        <Pencil
+          size={10}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
+        />
       </div>
     );
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-zinc-950/40 backdrop-blur-xs"
+        onClick={onClose}
+      />
 
-      <div className="relative z-10 flex w-full max-w-[1100px] max-h-[92vh] bg-white rounded-xl shadow-2xl overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 flex w-full max-w-5xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-zinc-200 overflow-hidden flex-col md:flex-row"
+      >
+        {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 z-20 p-1.5 rounded-lg bg-white/80 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shadow-sm"
+          className="absolute top-4 right-4 z-20 p-2 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer"
         >
-          <X size={18} />
+          <X size={16} />
         </button>
 
-        {/* LEFT: PDF Preview (A4 aspect ratio) */}
-        <div className="flex-1 overflow-y-auto bg-gray-100 p-6 flex items-start justify-center">
-          <div className="bg-white shadow-lg w-full max-w-[520px]" style={{ aspectRatio: '210/297' }}>
-            <div className="p-8 h-full flex flex-col">
-              {/* Thick top line */}
-              <div className="h-[2px] bg-black w-full mb-5" />
+        {/* LEFT: PDF Sheet Preview (A4 aspect ratio) */}
+        <div className="flex-1 overflow-y-auto bg-zinc-100 p-6 flex items-start justify-center">
+          <div
+            className="bg-white shadow-xl border border-zinc-300 w-full max-w-[480px] rounded-lg"
+            style={{ aspectRatio: '210/297' }}
+          >
+            <div className="p-8 h-full flex flex-col font-sans text-zinc-900 text-xs">
+              {/* Header Bar */}
+              <div className="flex items-center justify-between pb-3 border-b-2 border-zinc-950 mb-4">
+                <div>
+                  <h3 className="text-sm font-black tracking-tight text-zinc-950">KLS MARTIN GROUP</h3>
+                  <p className="text-[10px] text-zinc-500 font-medium">Surgical Instrument Set Report</p>
+                </div>
+                <span className="text-[9.5px] font-mono text-zinc-400 uppercase">DIN EN ISO 13485</span>
+              </div>
 
               {/* Hospital / Region / Date */}
-              <div className="flex justify-between mb-1">
-                <div className="space-y-0.5">
-                  <div className="flex items-baseline">
-                    <span className="text-[11px] font-bold mr-1">Hospital:</span>
-                    <EditableField field="hospital" label="Hospital" value={form.hospital} className="flex-1 max-w-[200px]" />
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="text-[11px] font-bold mr-1">Region:</span>
-                    <EditableField field="region" label="Region" value={form.region} className="flex-1 max-w-[200px]" />
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="text-[11px] font-bold mr-1">Date:</span>
-                    <EditableField field="report_date" label="Date" value={form.report_date} className="flex-1 max-w-[200px]" />
-                  </div>
+              <div className="space-y-1.5 mb-4 text-xs">
+                <div className="flex items-baseline">
+                  <span className="text-[11px] font-bold w-20 text-zinc-500">Hospital:</span>
+                  <EditableField field="hospital" label="Hospital" value={form.hospital} className="flex-1" />
+                </div>
+                <div className="flex items-baseline">
+                  <span className="text-[11px] font-bold w-20 text-zinc-500">Region:</span>
+                  <EditableField field="region" label="Region" value={form.region} className="flex-1" />
+                </div>
+                <div className="flex items-baseline">
+                  <span className="text-[11px] font-bold w-20 text-zinc-500">Date:</span>
+                  <EditableField field="report_date" label="Date" value={form.report_date} className="flex-1" />
                 </div>
               </div>
 
-              <div className="h-3" />
-
-              {/* Set no. / Quantity / Name / Container */}
-              <div className="space-y-0.5">
-                <div className="flex items-baseline">
-                  <span className="text-[11px] font-bold mr-1">Set no.:</span>
-                  <EditableField field="set_no" label="Set no." value={form.set_no} className="flex-1 max-w-[200px]" />
-                  <div className="flex-1" />
-                  <span className="text-[11px] font-bold mr-1">Quantity:</span>
-                  <span className="text-[11px]">{totalQuantity}</span>
+              {/* Set details banner */}
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-xs space-y-1 mb-4">
+                <div className="flex items-baseline justify-between">
+                  <div className="flex items-baseline">
+                    <span className="font-bold mr-1 text-zinc-500">Set no.:</span>
+                    <EditableField field="set_no" label="Set no." value={form.set_no} />
+                  </div>
+                  <div className="flex items-baseline font-mono">
+                    <span className="font-bold mr-1 text-zinc-500">Total Qty:</span>
+                    <span className="font-bold text-zinc-950">{totalQuantity}</span>
+                  </div>
                 </div>
                 <div className="flex items-baseline">
-                  <span className="text-[11px] font-bold mr-1">Name:</span>
-                  <EditableField field="name" label="Name" value={form.name} className="flex-1 max-w-[300px]" />
+                  <span className="font-bold mr-1 text-zinc-500">Name:</span>
+                  <EditableField field="name" label="Name" value={form.name} className="flex-1" />
                 </div>
                 <div className="flex items-baseline">
-                  <span className="text-[11px] font-bold mr-1">Container:</span>
-                  <EditableField field="container" label="Container" value={form.container} className="flex-1 max-w-[200px]" />
+                  <span className="font-bold mr-1 text-zinc-500">Container:</span>
+                  <EditableField field="container" label="Container" value={form.container} className="flex-1" />
                 </div>
               </div>
 
-              <div className="h-3" />
-              <div className="h-px bg-gray-400 w-full mb-2" />
-
-              {/* Items table */}
+              {/* Table */}
               <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-[10px]">
+                <table className="w-full text-[11px]">
                   <thead>
-                    <tr className="border-b border-black">
-                      <th className="text-left py-1.5 font-bold text-[10px] w-[22%]">Number</th>
-                      <th className="text-left py-1.5 font-bold text-[10px]">Name</th>
-                      <th className="text-left py-1.5 font-bold text-[10px] w-[14%]">Quantity<br />in set</th>
+                    <tr className="border-b border-zinc-950 text-zinc-600 font-bold">
+                      <th className="text-left py-1.5 font-bold w-[24%]">Article No.</th>
+                      <th className="text-left py-1.5 font-bold">Instrument Name</th>
+                      <th className="text-right py-1.5 font-bold w-[12%]">Qty</th>
                       <th className="w-[18%]"></th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-zinc-100">
                     {items.map((item, idx) => {
                       const p = item.product;
                       const productName = p?.name || item.product_code;
                       const hasImage = p?.has_image;
                       return (
-                        <tr key={item.id || idx} className="border-b border-gray-300">
-                          <td className="py-2.5 text-[10px] align-top">{item.product_code}</td>
-                          <td className="py-2.5 text-[10px] align-top">Art. No. {item.product_code}</td>
-                          <td className="py-2.5 text-[10px] align-top">{item.quantity}</td>
-                          <td className="py-2.5 align-top">
+                        <tr key={item.id || idx}>
+                          <td className="py-2 font-mono text-zinc-600 align-top">{item.product_code}</td>
+                          <td className="py-2 font-semibold text-zinc-950 align-top">{productName}</td>
+                          <td className="py-2 font-mono text-right font-bold align-top">{item.quantity}</td>
+                          <td className="py-2 text-right align-top">
                             {hasImage ? (
                               <img
                                 src={getProductImage(item.product_code)}
                                 alt={productName}
-                                className="max-h-[50px] max-w-[60px] object-contain"
+                                className="max-h-8 max-w-12 object-contain ml-auto"
                               />
                             ) : (
-                              <div className="w-12 h-12 bg-gray-50 border border-gray-200 rounded flex items-center justify-center text-[8px] text-gray-300">
-                                No img
-                              </div>
+                              <span className="text-[9px] text-zinc-400 font-mono">No image</span>
                             )}
                           </td>
                         </tr>
@@ -184,132 +191,96 @@ export default function CheckoutPreview({ items = [], onClose }) {
                     })}
                   </tbody>
                 </table>
-
-                {items.length === 0 && (
-                  <div className="py-8 text-center text-[10px] text-gray-300 italic">
-                    No items in cart
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: Controls */}
-        <div className="w-[300px] bg-white border-l border-gray-200 flex flex-col">
-          <div className="p-5 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">PDF Settings</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Click any field in the preview to edit</p>
+        {/* RIGHT: Controls & Form */}
+        <div className="w-full md:w-80 bg-white border-t md:border-t-0 md:border-l border-zinc-200 flex flex-col text-xs">
+          <div className="p-5 border-b border-zinc-200">
+            <h2 className="text-sm font-bold text-zinc-950 flex items-center gap-2">
+              <FileText size={15} className="text-zinc-950" />
+              <span>Set Report Metadata</span>
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Configure hospital details and surgery container specifications for the official PDF export.
+            </p>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {/* Quick edit fields */}
-            <div className="space-y-3">
+          <div className="flex-1 overflow-y-auto p-5 space-y-3.5">
+            <div>
+              <label className="form-label">Hospital / Clinic</label>
+              <input
+                type="text"
+                value={form.hospital}
+                onChange={(e) => handleChange('hospital', e.target.value)}
+                className="form-input"
+              />
+            </div>
+
+            <div>
+              <label className="form-label">Department / Region</label>
+              <input
+                type="text"
+                value={form.region}
+                onChange={(e) => handleChange('region', e.target.value)}
+                className="form-input"
+              />
+            </div>
+
+            <div>
+              <label className="form-label">Set Designation</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                className="form-input"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Hospital</label>
+                <label className="form-label">Set ID</label>
                 <input
                   type="text"
-                  value={form.hospital}
-                  onChange={(e) => handleChange('hospital', e.target.value)}
-                  placeholder="Hospital name"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all placeholder:text-gray-300"
+                  value={form.set_no}
+                  onChange={(e) => handleChange('set_no', e.target.value)}
+                  className="form-input font-mono"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Region</label>
-                <input
-                  type="text"
-                  value={form.region}
-                  onChange={(e) => handleChange('region', e.target.value)}
-                  placeholder="Region"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all placeholder:text-gray-300"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Date</label>
-                <input
-                  type="text"
-                  value={form.report_date}
-                  onChange={(e) => handleChange('report_date', e.target.value)}
-                  placeholder="M/D/YYYY"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all placeholder:text-gray-300"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Set no.</label>
-                  <input
-                    type="text"
-                    value={form.set_no}
-                    onChange={(e) => handleChange('set_no', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Quantity</label>
-                  <div className="px-3 py-2 border border-gray-100 rounded-lg text-sm text-gray-500 bg-gray-50">
-                    {totalQuantity}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Container</label>
+                <label className="form-label">Container</label>
                 <input
                   type="text"
                   value={form.container}
                   onChange={(e) => handleChange('container', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 transition-all"
+                  className="form-input"
                 />
               </div>
             </div>
-
-            {/* Items summary */}
-            <div className="border-t border-gray-100 pt-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Items ({items.length})</p>
-              <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between text-xs text-gray-600">
-                    <span className="truncate mr-2">{item.product?.name || item.product_code}</span>
-                    <span className="text-gray-400 shrink-0">x{item.quantity}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* Actions */}
-          <div className="p-5 border-t border-gray-100 space-y-3">
+          {/* Action Footer */}
+          <div className="p-5 border-t border-zinc-200 space-y-2 bg-zinc-50">
             <button
               onClick={handleDownload}
               disabled={downloading || items.length === 0}
-              className={cn(
-                'w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl transition-all',
-                items.length > 0 && !downloading
-                  ? 'bg-[#c8102e] text-white hover:bg-[#b00d24] shadow-sm'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              )}
+              className="w-full py-2.5 px-4 bg-zinc-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
-              <Download size={16} />
-              {downloading ? 'Generating...' : 'Download PDF'}
+              <Download size={14} />
+              <span>{downloading ? 'Generating Official PDF...' : 'Download Official PDF Report'}</span>
             </button>
+
             <button
               onClick={onClose}
-              className="w-full px-4 py-2.5 text-sm font-medium rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              className="w-full py-2 px-3 border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
             >
-              Close
+              Cancel
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
