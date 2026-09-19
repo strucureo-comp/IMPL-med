@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 
-// Forward requests from the frontend; the existing backend needs no CORS changes.
+// Forward local development and preview requests to the API target.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'API_');
   const target = process.env.API_TARGET || env.API_TARGET || 'http://aurelion.local:3000';
